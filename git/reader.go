@@ -2,6 +2,7 @@ package git
 
 import (
 	"strings"
+	"fmt"
 
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
@@ -121,4 +122,138 @@ func (r *Repository) collectRefs() (map[string][]Ref, string, error) {
 	})
 
 	return refMap, headBranch, nil
+}
+
+func (r *Repository) GetStatus() (*StatusResult, error) {
+	w, err := r.repo.Worktree()
+	if err != nil {
+		return nil, err
+	}
+
+	status, err := w.Status()
+	if err != nil {
+		return nil, err
+	}
+
+	res := &StatusResult{}
+
+	head, err := r.repo.Head()
+	if err == nil {
+		if head.Name().IsBranch() {
+			res.Branch = head.Name().Short()
+		} else {
+			res.Branch = "HEAD (detached)"
+		}
+	} else {
+		res.Branch = "HEAD (empty)"
+	}
+
+	if res.Branch != "" && !head.Name().IsBranch() == false {
+		r.calculateBranchSync(res, head.Hash())
+	}
+
+	for path, fileStatus := range status {
+		if fileStatus.Staging != gogit.Unmodified && fileStatus.Staging != gogit.Untracked {
+			res.Staged = append(res.Staged, FileChange{
+				Path:   path,
+				Letter: statusCodeToLetter(fileStatus.Staging),
+			})
+		}
+		if fileStatus.Worktree == gogit.Untracked {
+			res.Untracked = append(res.Untracked, FileChange{
+				Path:   path,
+				Letter: "U", 
+			})
+			continue
+		}
+
+		if fileStatus.Worktree != gogit.Unmodified {
+			res.Unstaged = append(res.Unstaged, FileChange{
+				Path:   path,
+				Letter: statusCodeToLetter(fileStatus.Worktree),
+			})
+		}
+	}
+
+	return res, nil
+}
+
+func statusCodeToLetter(code gogit.StatusCode) string {
+	switch code {
+	case gogit.Modified:
+		return "M"
+	case gogit.Added:
+		return "A"
+	case gogit.Deleted:
+		return "D"
+	case gogit.Renamed:
+		return "R"
+	default:
+		return string(code)
+	}
+}
+
+func (r *Repository) calculateBranchSync(res *StatusResult, localHash plumbing.Hash) {
+	config, err := r.repo.Config()
+	if err != nil {
+		return
+	}
+
+	branchCfg := config.Branches[res.Branch]
+	if branchCfg == nil || branchCfg.Remote == "" {
+		return
+	}
+
+	remoteRefName := plumbing.NewRemoteReferenceName(branchCfg.Remote, res.Branch)
+	remoteRef, err := r.repo.Reference(remoteRefName, true)
+	if err != nil {
+		return
+	}
+
+	res.HasUpstream = true
+	res.UpstreamName = branchCfg.Remote + "/" + res.Branch
+
+	upstreamHash := remoteRef.Hash()
+	if localHash == upstreamHash {
+		return
+	}
+
+	upstreamMap := make(map[string]bool)
+	uIter, err := r.repo.Log(&gogit.LogOptions{From: upstreamHash})
+	if err == nil {
+		count := 0
+		_ = uIter.ForEach(func(c *object.Commit) error {
+			if count >= 50 {
+				return fmt.Errorf("limit")
+			}
+			upstreamMap[c.Hash.String()] = true
+			count++
+			return nil
+		})
+		uIter.Close()
+	}
+
+	localMap := make(map[string]bool)
+	lIter, err := r.repo.Log(&gogit.LogOptions{From: localHash})
+	if err == nil {
+		count := 0
+		_ = lIter.ForEach(func(c *object.Commit) error {
+			if count >= 50 {
+				return fmt.Errorf("limit")
+			}
+			localMap[c.Hash.String()] = true
+			if !upstreamMap[c.Hash.String()] {
+				res.Ahead++
+			}
+			count++
+			return nil
+		})
+		lIter.Close()
+	}
+	
+	for hash := range upstreamMap {
+		if !localMap[hash] {
+			res.Behind++
+		}
+	}
 }
