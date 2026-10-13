@@ -3,6 +3,7 @@ package git
 import (
 	"strings"
 	"fmt"
+	"errors"
 
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
@@ -44,10 +45,11 @@ func (r *Repository) GetCommits(limit int) ([]Commit, error) {
 
 	var commits []Commit
 	count := 0
+	stopLimit := errors.New("limit reached")
 
 	err = cIter.ForEach(func(c *object.Commit) error {
 		if limit > 0 && count >= limit {
-			return nil
+			return stopLimit
 		}
 
 		hashStr := c.Hash.String()
@@ -84,6 +86,10 @@ func (r *Repository) GetCommits(limit int) ([]Commit, error) {
 		count++
 		return nil
 	})
+
+	if err == stopLimit {
+		err = nil
+	}
 
 	return commits, err
 }
@@ -162,7 +168,7 @@ func (r *Repository) GetStatus() (*StatusResult, error) {
 		if fileStatus.Worktree == gogit.Untracked {
 			res.Untracked = append(res.Untracked, FileChange{
 				Path:   path,
-				Letter: "U", 
+				Letter: "U",
 			})
 			continue
 		}
@@ -250,7 +256,7 @@ func (r *Repository) calculateBranchSync(res *StatusResult, localHash plumbing.H
 		})
 		lIter.Close()
 	}
-	
+
 	for hash := range upstreamMap {
 		if !localMap[hash] {
 			res.Behind++
