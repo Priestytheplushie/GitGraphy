@@ -263,3 +263,129 @@ func (r *Repository) calculateBranchSync(res *StatusResult, localHash plumbing.H
 		}
 	}
 }
+
+func (r *Repository) GetAllCommits(limit int) ([]Commit, error) {
+	refMap, headBranch, err := r.collectRefs()
+	if err != nil {
+		return nil, err
+	}
+
+	var tipHashes []plumbing.Hash
+	refIter, err := r.repo.References()
+	if err != nil {
+		return nil, err
+	}
+	defer refIter.Close()
+
+	_ = refIter.ForEach(func(ref *plumbing.Reference) error {
+		if ref.Type() == plumbing.HashReference && (ref.Name().IsBranch() || ref.Name().IsRemote()) {
+			tipHashes = append(tipHashes, ref.Hash())
+		}
+		return nil
+	})
+
+	if len(tipHashes) == 0 {
+		head, err := r.repo.Head()
+		if err == nil {
+			tipHashes = append(tipHashes, head.Hash())
+		}
+	}
+
+	commitMap := make(map[string]*object.Commit)
+	for _, tip := range tipHashes {
+		cIter, err := r.repo.Log(&gogit.LogOptions{From: tip})
+		if err != nil {
+			continue
+		}
+		_ = cIter.ForEach(func(c *object.Commit) error {
+			commitMap[c.Hash.String()] = c
+			return nil
+		})
+		cIter.Close()
+	}
+
+	if len(commitMap) == 0 {
+		return nil, nil
+	}
+
+	childCount := make(map[string]int)
+	parentsMap := make(map[string][]string)
+
+	for h, c := range commitMap {
+		for _, ph := range c.ParentHashes {
+			pStr := ph.String()
+			if _, exists := commitMap[pStr]; exists {
+				childCount[pStr]++
+				parentsMap[h] = append(parentsMap[h], pStr)
+			}
+		}
+	}
+
+	var ready []string
+	for h := range commitMap {
+		if childCount[h] == 0 {
+			ready = append(ready, h)
+		}
+	}
+
+	var sorted []*object.Commit
+	for len(ready) > 0 {
+		bestIdx := 0
+		for i := 1; i < len(ready); i++ {
+			if commitMap[ready[i]].Author.When.After(commitMap[ready[bestIdx]].Author.When) {
+				bestIdx = i
+			}
+		}
+
+		currHash := ready[bestIdx]
+		ready = append(ready[:bestIdx], ready[bestIdx+1:]...)
+		currCommit := commitMap[currHash]
+		sorted = append(sorted, currCommit)
+
+		if limit > 0 && len(sorted) >= limit {
+			break
+		}
+		for _, pHash := range parentsMap[currHash] {
+			childCount[pHash]--
+			if childCount[pHash] == 0 {
+				ready = append(ready, pHash)
+			}
+		}
+	}
+
+	var result []Commit
+	for _, c := range sorted {
+		hashStr := c.Hash.String()
+		shortHash := hashStr
+		if len(shortHash) > 7 {
+			shortHash = shortHash[:7]
+		}
+
+		subject := strings.Split(c.Message, "\n")[0]
+
+		var parentHashes []string
+		for _, ph := range c.ParentHashes {
+			parentHashes = append(parentHashes, ph.String())
+		}
+
+		refs := refMap[hashStr]
+		for i := range refs {
+			if refs[i].Name == headBranch {
+				refs[i].IsHEAD = true
+			}
+		}
+
+		result = append(result, Commit{
+			Hash:         hashStr,
+			ShortHash:    shortHash,
+			ParentHashes: parentHashes,
+			AuthorName:   c.Author.Name,
+			AuthorEmail:  c.Author.Email,
+			When:         c.Author.When,
+			Subject:      subject,
+			Refs:         refs,
+		})
+	}
+
+	return result, nil
+}
