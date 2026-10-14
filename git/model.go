@@ -22,7 +22,7 @@ type Commit struct {
 
 type FileChange struct {
 	Path   string
-	Letter string 
+	Letter string
 }
 
 type StatusResult struct {
@@ -38,4 +38,21 @@ type StatusResult struct {
 
 func (s *StatusResult) IsClean() bool {
 	return len(s.Staged) == 0 && len(s.Unstaged) == 0 && len(s.Untracked) == 0
+}
+
+type FileStat struct {
+	Name      string
+	Additions int
+	Deletions int
+	IsBinary  bool
+	IsLock    bool
+}
+
+type CommitDetails struct {
+	Commit    Commit
+	Message   string
+	Stats     []FileStat
+	TotalAdd  int
+	TotalDel  int
+	PatchText string
 }

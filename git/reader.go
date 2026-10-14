@@ -389,3 +389,121 @@ func (r *Repository) GetAllCommits(limit int) ([]Commit, error) {
 
 	return result, nil
 }
+
+func (r *Repository) GetCommitDetails(rev string) (*CommitDetails, error) {
+	if rev == "" {
+		rev = "HEAD"
+	}
+
+	hash, err := r.repo.ResolveRevision(plumbing.Revision(rev))
+	if err != nil {
+		return nil, fmt.Errorf("revision not found: %s", rev)
+	}
+
+	commitObj, err := r.repo.CommitObject(*hash)
+	if err != nil {
+		return nil, err
+	}
+
+	commitTree, err := commitObj.Tree()
+	if err != nil {
+		return nil, err
+	}
+
+	var parentTree *object.Tree
+	if commitObj.NumParents() > 0 {
+		parent, err := commitObj.Parent(0)
+		if err == nil {
+			parentTree, _ = parent.Tree()
+		}
+	}
+	if parentTree == nil {
+		parentTree = &object.Tree{}
+	}
+
+	patch, err := parentTree.Patch(commitTree)
+	if err != nil {
+		return nil, err
+	}
+
+	refMap, headBranch, _ := r.collectRefs()
+	hashStr := commitObj.Hash.String()
+	shortHash := hashStr
+	if len(shortHash) > 7 {
+		shortHash = shortHash[:7]
+	}
+
+	refs := refMap[hashStr]
+	for i := range refs {
+		if refs[i].Name == headBranch {
+			refs[i].IsHEAD = true
+		}
+	}
+
+	var parentHashes []string
+	for _, ph := range commitObj.ParentHashes {
+		parentHashes = append(parentHashes, ph.String())
+	}
+
+	details := &CommitDetails{
+		Commit: Commit{
+			Hash:         hashStr,
+			ShortHash:    shortHash,
+			ParentHashes: parentHashes,
+			AuthorName:   commitObj.Author.Name,
+			AuthorEmail:  commitObj.Author.Email,
+			When:         commitObj.Author.When,
+			Subject:      strings.Split(commitObj.Message, "\n")[0],
+			Refs:         refs,
+		},
+		Message:   strings.TrimSpace(commitObj.Message),
+		PatchText: patch.String(),
+	}
+
+	for _, fp := range patch.FilePatches() {
+		from, to := fp.Files()
+		name := ""
+		if to != nil {
+			name = to.Path()
+		} else if from != nil {
+			name = from.Path()
+		}
+
+		adds := 0
+		dels := 0
+		for _, chunk := range fp.Chunks() {
+			switch chunk.Type() {
+			case 1:
+				adds += strings.Count(chunk.Content(), "\n")
+			case 2:
+				dels += strings.Count(chunk.Content(), "\n")
+			}
+		}
+
+		isLock := isLockfile(name)
+
+		details.Stats = append(details.Stats, FileStat{
+			Name:      name,
+			Additions: adds,
+			Deletions: dels,
+			IsBinary:  fp.IsBinary(),
+			IsLock:    isLock,
+		})
+
+		details.TotalAdd += adds
+		details.TotalDel += dels
+	}
+
+	return details, nil
+}
+
+func isLockfile(path string) bool {
+	parts := strings.Split(path, "/")
+	name := parts[len(parts)-1]
+	switch name {
+	case "go.sum", "package-lock.json", "yarn.lock", "pnpm-lock.yaml", "Cargo.lock", "composer.lock", "Gemfile.lock":
+		return true
+	default:
+		return false
+	}
+}
