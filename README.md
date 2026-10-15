@@ -36,7 +36,7 @@ gitgraphy graph -n 100
 ```
 You can use `gitgraphy status` to get a visual overview of the current working tree, seeing ahead/behind status of the branch as well as current staged, unstaged, and untracked files
 ```bash
-gitgraphy log
+gitgraphy status
 ```
 You can use `gitgraphy show` to view a commit and it's `diff`. You can pass in the `-s` or `-stats` flag to get a summary without a diff, or pass in a commit hash to inspect a specific commit
 ```bash 
