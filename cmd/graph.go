@@ -119,9 +119,9 @@ func renderGraph(commits []git.Commit) {
 		for i := 0; i < len(lanes); i++ {
 			cFunc := getLaneColor(i)
 			if i == laneIdx {
-				graphPrefix.WriteString(cFunc("●") + " ")
+				graphPrefix.WriteString(cFunc("●"));graphPrefix.WriteString(" ")
 			} else if lanes[i] != "" {
-				graphPrefix.WriteString(cFunc("│") + " ")
+				graphPrefix.WriteString(cFunc("│"));graphPrefix.WriteString(" ")
 			} else {
 				graphPrefix.WriteString("  ")
 			}
@@ -214,13 +214,13 @@ func renderBranchConnector(totalLanes, trunkLane, branchLane int, kind string) s
 	for i := 0; i < totalLanes; i++ {
 		if i == left {
 			if kind == "fork" {
-				sb.WriteString(trunkColor("├") + branchColor("─╮") + " ")
+				sb.WriteString(trunkColor("├"));sb.WriteString(branchColor("─╮"));sb.WriteString(" ")
 			} else {
-				sb.WriteString(trunkColor("├") + branchColor("─╯") + " ")
+				sb.WriteString(trunkColor("├"));sb.WriteString(branchColor("─╯"));sb.WriteString(" ")
 			}
 			i = right
 		} else if i < right {
-			sb.WriteString(getLaneColor(i)("│") + " ")
+			sb.WriteString(getLaneColor(i)("│"));sb.WriteString(" ")
 		}
 	}
 	return sb.String()
