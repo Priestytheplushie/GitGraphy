@@ -14,7 +14,7 @@ var graphLimit int
 
 var graphCmd = &cobra.Command{
 	Use:   "graph",
-	Short: "Visualize commit history as a multi-branch visual graph",
+	Short: "Visualize commit history as a multi-branch transit map",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		repo, err := git.Open(".")
 		if err != nil {
@@ -37,7 +37,7 @@ var graphCmd = &cobra.Command{
 }
 
 func init() {
-	graphCmd.Flags().IntVarP(&graphLimit, "limit", "n", 30, "Number of commits to show")
+	graphCmd.Flags().IntVarP(&graphLimit, "limit", "n", 30, "Number of commits to show (0 for all)")
 	rootCmd.AddCommand(graphCmd)
 }
 
@@ -68,18 +68,25 @@ func renderGraph(commits []git.Commit) {
 	maxLanesEncountered := 1
 
 	for _, c := range commits {
-		converging := []int{}
-		for i, h := range lanes {
-			if h == c.Hash {
-				converging = append(converging, i)
+		for {
+			target := -1
+			source := -1
+			for i, h := range lanes {
+				if h == c.Hash {
+					if target == -1 {
+						target = i
+					} else {
+						source = i
+						break
+					}
+				}
 			}
-		}
 
-		if len(converging) > 1 {
-			target := converging[0]
-			source := converging[1]
+			if source == -1 {
+				break
+			}
 
-			line := renderBranchConnector(len(lanes), target, source, "merge") + padGutter(len(lanes), maxLanesEncountered)
+			line := buildBridge(lanes, target, source, "merge") + padGutter(len(lanes), maxLanesEncountered)
 			fmt.Println(line)
 
 			lanes[source] = ""
@@ -119,9 +126,9 @@ func renderGraph(commits []git.Commit) {
 		for i := 0; i < len(lanes); i++ {
 			cFunc := getLaneColor(i)
 			if i == laneIdx {
-				graphPrefix.WriteString(cFunc("●"));graphPrefix.WriteString(" ")
+				graphPrefix.WriteString(cFunc("●") + " ")
 			} else if lanes[i] != "" {
-				graphPrefix.WriteString(cFunc("│"));graphPrefix.WriteString(" ")
+				graphPrefix.WriteString(cFunc("│") + " ")
 			} else {
 				graphPrefix.WriteString("  ")
 			}
@@ -133,24 +140,35 @@ func renderGraph(commits []git.Commit) {
 
 		if len(c.ParentHashes) == 0 {
 			lanes[laneIdx] = ""
+			for len(lanes) > 0 && lanes[len(lanes)-1] == "" {
+				lanes = lanes[:len(lanes)-1]
+			}
 		} else {
 			lanes[laneIdx] = c.ParentHashes[0]
 			if isMerge {
 				parent2 := c.ParentHashes[1]
 				for i, h := range lanes {
-					if h == "" {
+					if h == parent2 {
 						p2Lane = i
 						break
 					}
 				}
 				if p2Lane == -1 {
-					lanes = append(lanes, parent2)
-					p2Lane = len(lanes) - 1
-				} else {
-					lanes[p2Lane] = parent2
-				}
-				if len(lanes) > maxLanesEncountered {
-					maxLanesEncountered = len(lanes)
+					for i, h := range lanes {
+						if h == "" {
+							p2Lane = i
+							break
+						}
+					}
+					if p2Lane == -1 {
+						lanes = append(lanes, parent2)
+						p2Lane = len(lanes) - 1
+					} else {
+						lanes[p2Lane] = parent2
+					}
+					if len(lanes) > maxLanesEncountered {
+						maxLanesEncountered = len(lanes)
+					}
 				}
 			}
 		}
@@ -193,36 +211,78 @@ func renderGraph(commits []git.Commit) {
 		)
 
 		if isMerge && p2Lane != -1 {
-			line := renderBranchConnector(len(lanes), laneIdx, p2Lane, "fork") + padGutter(len(lanes), maxLanesEncountered)
+			line := buildBridge(lanes, laneIdx, p2Lane, "fork") + padGutter(len(lanes), maxLanesEncountered)
 			fmt.Println(line)
 		}
 	}
 }
 
-func renderBranchConnector(totalLanes, trunkLane, branchLane int, kind string) string {
+func buildBridge(lanes []string, trunkLane, branchLane int, kind string) string {
 	var sb strings.Builder
 
 	left := trunkLane
 	right := branchLane
+	reversed := false
 	if left > right {
 		left, right = right, left
+		reversed = true
 	}
 
 	trunkColor := getLaneColor(trunkLane)
 	branchColor := getLaneColor(branchLane)
 
-	for i := 0; i < totalLanes; i++ {
-		if i == left {
-			if kind == "fork" {
-				sb.WriteString(trunkColor("├"));sb.WriteString(branchColor("─╮"));sb.WriteString(" ")
+	bridgeColor := branchColor
+	if reversed {
+		bridgeColor = trunkColor
+	}
+
+	for i := 0; i < len(lanes); i++ {
+		switch {
+		case i < left:
+			if lanes[i] != "" {
+				sb.WriteString(getLaneColor(i)("│") + " ")
 			} else {
-				sb.WriteString(trunkColor("├"));sb.WriteString(branchColor("─╯"));sb.WriteString(" ")
+				sb.WriteString("  ")
 			}
-			i = right
-		} else if i < right {
-			sb.WriteString(getLaneColor(i)("│"));sb.WriteString(" ")
+
+		case i == left:
+			if !reversed {
+				sb.WriteString(trunkColor("├") + branchColor("─"))
+			} else {
+				if kind == "fork" {
+					sb.WriteString(branchColor("╭") + trunkColor("─"))
+				} else {
+					sb.WriteString(branchColor("╰") + trunkColor("─"))
+				}
+			}
+
+		case i > left && i < right:
+			if lanes[i] != "" {
+				sb.WriteString(getLaneColor(i)("│") + bridgeColor("─"))
+			} else {
+				sb.WriteString(bridgeColor("──"))
+			}
+
+		case i == right:
+			if !reversed {
+				if kind == "fork" {
+					sb.WriteString(branchColor("╮") + " ")
+				} else {
+					sb.WriteString(branchColor("╯") + " ")
+				}
+			} else {
+				sb.WriteString(trunkColor("┤") + " ")
+			}
+
+		case i > right:
+			if lanes[i] != "" {
+				sb.WriteString(getLaneColor(i)("│") + " ")
+			} else {
+				sb.WriteString("  ")
+			}
 		}
 	}
+
 	return sb.String()
 }
 
