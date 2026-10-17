@@ -56,3 +56,21 @@ type CommitDetails struct {
 	TotalDel  int
 	PatchText string
 }
+
+type BlameLine struct {
+	LineNo    int
+	Hash      string
+	ShortHash string
+	Author    string
+	Subject   string
+	Date      time.Time
+	Code      string
+}
+
+type BlameResult struct {
+	Path        string
+	TotalLines  int
+	Authors     []string
+	CommitCount int
+	Lines       []BlameLine
+}

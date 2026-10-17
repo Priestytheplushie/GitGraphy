@@ -4,6 +4,7 @@ import (
 	"strings"
 	"fmt"
 	"errors"
+	"path/filepath"
 
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
@@ -506,4 +507,74 @@ func isLockfile(path string) bool {
 	default:
 		return false
 	}
+}
+
+func (r *Repository) GetBlame(filePath string) (*BlameResult, error) {
+	head, err := r.repo.Head()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get HEAD: %w", err)
+	}
+
+	commit, err := r.repo.CommitObject(head.Hash())
+	if err != nil {
+		return nil, fmt.Errorf("failed to get commit object: %w", err)
+	}
+
+	cleanPath := filepath.ToSlash(filePath)
+	cleanPath = strings.TrimPrefix(cleanPath, "./")
+
+	res, err := gogit.Blame(commit, cleanPath)
+	if err != nil {
+		return nil, fmt.Errorf("could not blame file %q: %w", filePath, err)
+	}
+
+	commitCache := make(map[string]*object.Commit)
+	authorSet := make(map[string]bool)
+
+	blameRes := &BlameResult{
+		Path:       cleanPath,
+		TotalLines: len(res.Lines),
+	}
+
+	for i, l := range res.Lines {
+		hashStr := l.Hash.String()
+		shortHash := hashStr
+		if len(shortHash) > 7 {
+			shortHash = shortHash[:7]
+		}
+
+		c, exists := commitCache[hashStr]
+		if !exists {
+			c, _ = r.repo.CommitObject(l.Hash)
+			commitCache[hashStr] = c
+		}
+
+		authorName := l.Author
+		subject := ""
+		if c != nil {
+			if c.Author.Name != "" {
+				authorName = c.Author.Name
+			}
+			subject = strings.Split(c.Message, "\n")[0]
+		}
+
+		authorSet[authorName] = true
+
+		blameRes.Lines = append(blameRes.Lines, BlameLine{
+			LineNo:    i + 1,
+			Hash:      hashStr,
+			ShortHash: shortHash,
+			Author:    authorName,
+			Subject:   subject,
+			Date:      l.Date,
+			Code:      l.Text,
+		})
+	}
+
+	for a := range authorSet {
+		blameRes.Authors = append(blameRes.Authors, a)
+	}
+	blameRes.CommitCount = len(commitCache)
+
+	return blameRes, nil
 }
