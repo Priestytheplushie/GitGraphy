@@ -610,21 +610,38 @@ func (r *Repository) Compare(baseRef, targetRef string) (*CompareResult, error) 
 		return nil, err
 	}
 
-	mergeBases, err := baseCommit.MergeBase(targetCommit)
-	if err != nil || len(mergeBases) == 0 {
-		return nil, fmt.Errorf("no common ancestor found between %s and %s", baseRef, targetRef)
-	}
-	commonAncestor := mergeBases[0]
-
 	refMap, headBranch, _ := r.collectRefs()
 
-	var aheadCommits []Commit
-	ancestorHash := commonAncestor.Hash.String()
+	mergeBases, err := baseCommit.MergeBase(targetCommit)
+	unrelated := err != nil || len(mergeBases) == 0
 
+	var sourceTree *object.Tree
+	ancestorHash := ""
+
+	if unrelated {
+		// When histories are unrelated, fall back to direct tree comparison
+		sourceTree, err = baseCommit.Tree()
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		commonAncestor := mergeBases[0]
+		ancestorHash = commonAncestor.Hash.String()
+		sourceTree, err = commonAncestor.Tree()
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	var aheadCommits []Commit
 	cIter, err := r.repo.Log(&gogit.LogOptions{From: *targetHash})
 	if err == nil {
+		count := 0
 		_ = cIter.ForEach(func(c *object.Commit) error {
-			if c.Hash.String() == ancestorHash {
+			if !unrelated && c.Hash.String() == ancestorHash {
+				return fmt.Errorf("stop")
+			}
+			if unrelated && count >= 50 {
 				return fmt.Errorf("stop")
 			}
 
@@ -650,6 +667,7 @@ func (r *Repository) Compare(baseRef, targetRef string) (*CompareResult, error) 
 				Subject:     strings.Split(c.Message, "\n")[0],
 				Refs:        refs,
 			})
+			count++
 			return nil
 		})
 		cIter.Close()
@@ -658,19 +676,19 @@ func (r *Repository) Compare(baseRef, targetRef string) (*CompareResult, error) 
 	behindCount := 0
 	bIter, err := r.repo.Log(&gogit.LogOptions{From: *baseHash})
 	if err == nil {
+		count := 0
 		_ = bIter.ForEach(func(c *object.Commit) error {
-			if c.Hash.String() == ancestorHash {
+			if !unrelated && c.Hash.String() == ancestorHash {
+				return fmt.Errorf("stop")
+			}
+			if unrelated && count >= 50 {
 				return fmt.Errorf("stop")
 			}
 			behindCount++
+			count++
 			return nil
 		})
 		bIter.Close()
-	}
-
-	ancestorTree, err := commonAncestor.Tree()
-	if err != nil {
-		return nil, err
 	}
 
 	targetTree, err := targetCommit.Tree()
@@ -678,18 +696,19 @@ func (r *Repository) Compare(baseRef, targetRef string) (*CompareResult, error) 
 		return nil, err
 	}
 
-	patch, err := ancestorTree.Patch(targetTree)
+	patch, err := sourceTree.Patch(targetTree)
 	if err != nil {
 		return nil, err
 	}
 
 	res := &CompareResult{
-		BaseRef:      baseRef,
-		TargetRef:    targetRef,
-		CommitsAhead: aheadCommits,
-		AheadCount:   len(aheadCommits),
-		BehindCount:  behindCount,
-		PatchText:    patch.String(),
+		BaseRef:            baseRef,
+		TargetRef:          targetRef,
+		UnrelatedHistories: unrelated,
+		CommitsAhead:       aheadCommits,
+		AheadCount:         len(aheadCommits),
+		BehindCount:        behindCount,
+		PatchText:          patch.String(),
 	}
 
 	for _, fp := range patch.FilePatches() {

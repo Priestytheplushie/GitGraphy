@@ -76,13 +76,14 @@ type BlameResult struct {
 }
 
 type CompareResult struct {
-	BaseRef      string
-	TargetRef    string
-	CommitsAhead []Commit
-	AheadCount   int
-	BehindCount  int
-	Stats        []FileStat
-	TotalAdd     int
-	TotalDel     int
-	PatchText    string
+	BaseRef            string
+	TargetRef          string
+	UnrelatedHistories bool
+	CommitsAhead       []Commit
+	AheadCount         int
+	BehindCount        int
+	Stats              []FileStat
+	TotalAdd           int
+	TotalDel           int
+	PatchText          string
 }

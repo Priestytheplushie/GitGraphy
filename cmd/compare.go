@@ -65,12 +65,22 @@ func renderCompare(c *git.CompareResult, statOnly bool) {
 	nodeColor := color.New(color.FgHiMagenta).SprintFunc()
 	hashColor := color.New(color.FgYellow).SprintFunc()
 	authorColor := color.New(color.FgBlue).SprintFunc()
+	warnColor := color.New(color.FgHiYellow, color.Bold).SprintFunc()
 
 	fmt.Printf(
 		"Comparing: %s...%s\n",
 		cyanBold(c.BaseRef),
 		cyanBold(c.TargetRef),
 	)
+
+	if c.UnrelatedHistories {
+		fmt.Printf(
+			"%s %s\n",
+			warnColor("Entirely different commit histories:"),
+			faint("no common ancestor found. Comparing full trees."),
+		)
+	}
+
 	fmt.Printf(
 		"Commits Ahead: %s  •  Commits Behind: %s\n\n",
 		color.New(color.FgHiGreen, color.Bold).Sprint(c.AheadCount),
@@ -78,7 +88,11 @@ func renderCompare(c *git.CompareResult, statOnly bool) {
 	)
 
 	if len(c.CommitsAhead) > 0 {
-		fmt.Printf("%s\n", faint(fmt.Sprintf("Commits (%d)", len(c.CommitsAhead))))
+		countLabel := fmt.Sprintf("Commits (%d)", len(c.CommitsAhead))
+		if c.UnrelatedHistories {
+			countLabel = fmt.Sprintf("Target Commits (showing up to %d)", len(c.CommitsAhead))
+		}
+		fmt.Printf("%s\n", faint(countLabel))
 		for _, cm := range c.CommitsAhead {
 			fmt.Printf(
 				"  %s %s %s  %s  %s  %s\n",
