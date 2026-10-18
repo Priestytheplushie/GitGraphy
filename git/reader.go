@@ -578,3 +578,151 @@ func (r *Repository) GetBlame(filePath string) (*BlameResult, error) {
 
 	return blameRes, nil
 }
+
+func (r *Repository) Compare(baseRef, targetRef string) (*CompareResult, error) {
+	if baseRef == "" {
+		if _, err := r.repo.ResolveRevision(plumbing.Revision("main")); err == nil {
+			baseRef = "main"
+		} else if _, err := r.repo.ResolveRevision(plumbing.Revision("master")); err == nil {
+			baseRef = "master"
+		} else {
+			baseRef = "HEAD"
+		}
+	}
+
+	baseHash, err := r.repo.ResolveRevision(plumbing.Revision(baseRef))
+	if err != nil {
+		return nil, fmt.Errorf("could not resolve base revision %q: %w", baseRef, err)
+	}
+
+	targetHash, err := r.repo.ResolveRevision(plumbing.Revision(targetRef))
+	if err != nil {
+		return nil, fmt.Errorf("could not resolve target revision %q: %w", targetRef, err)
+	}
+
+	baseCommit, err := r.repo.CommitObject(*baseHash)
+	if err != nil {
+		return nil, err
+	}
+
+	targetCommit, err := r.repo.CommitObject(*targetHash)
+	if err != nil {
+		return nil, err
+	}
+
+	mergeBases, err := baseCommit.MergeBase(targetCommit)
+	if err != nil || len(mergeBases) == 0 {
+		return nil, fmt.Errorf("no common ancestor found between %s and %s", baseRef, targetRef)
+	}
+	commonAncestor := mergeBases[0]
+
+	refMap, headBranch, _ := r.collectRefs()
+
+	var aheadCommits []Commit
+	ancestorHash := commonAncestor.Hash.String()
+
+	cIter, err := r.repo.Log(&gogit.LogOptions{From: *targetHash})
+	if err == nil {
+		_ = cIter.ForEach(func(c *object.Commit) error {
+			if c.Hash.String() == ancestorHash {
+				return fmt.Errorf("stop")
+			}
+
+			hashStr := c.Hash.String()
+			shortHash := hashStr
+			if len(shortHash) > 7 {
+				shortHash = shortHash[:7]
+			}
+
+			refs := refMap[hashStr]
+			for i := range refs {
+				if refs[i].Name == headBranch {
+					refs[i].IsHEAD = true
+				}
+			}
+
+			aheadCommits = append(aheadCommits, Commit{
+				Hash:        hashStr,
+				ShortHash:   shortHash,
+				AuthorName:  c.Author.Name,
+				AuthorEmail: c.Author.Email,
+				When:        c.Author.When,
+				Subject:     strings.Split(c.Message, "\n")[0],
+				Refs:        refs,
+			})
+			return nil
+		})
+		cIter.Close()
+	}
+
+	behindCount := 0
+	bIter, err := r.repo.Log(&gogit.LogOptions{From: *baseHash})
+	if err == nil {
+		_ = bIter.ForEach(func(c *object.Commit) error {
+			if c.Hash.String() == ancestorHash {
+				return fmt.Errorf("stop")
+			}
+			behindCount++
+			return nil
+		})
+		bIter.Close()
+	}
+
+	ancestorTree, err := commonAncestor.Tree()
+	if err != nil {
+		return nil, err
+	}
+
+	targetTree, err := targetCommit.Tree()
+	if err != nil {
+		return nil, err
+	}
+
+	patch, err := ancestorTree.Patch(targetTree)
+	if err != nil {
+		return nil, err
+	}
+
+	res := &CompareResult{
+		BaseRef:      baseRef,
+		TargetRef:    targetRef,
+		CommitsAhead: aheadCommits,
+		AheadCount:   len(aheadCommits),
+		BehindCount:  behindCount,
+		PatchText:    patch.String(),
+	}
+
+	for _, fp := range patch.FilePatches() {
+		from, to := fp.Files()
+		name := ""
+		if to != nil {
+			name = to.Path()
+		} else if from != nil {
+			name = from.Path()
+		}
+
+		adds := 0
+		dels := 0
+		for _, chunk := range fp.Chunks() {
+			switch chunk.Type() {
+			case 1:
+				adds += strings.Count(chunk.Content(), "\n")
+			case 2:
+				dels += strings.Count(chunk.Content(), "\n")
+			}
+		}
+
+		res.Stats = append(res.Stats, FileStat{
+			Name:      name,
+			Additions: adds,
+			Deletions: dels,
+			IsBinary:  fp.IsBinary(),
+			IsLock:    isLockfile(name),
+		})
+
+		res.TotalAdd += adds
+		res.TotalDel += dels
+	}
+
+	return res, nil
+}

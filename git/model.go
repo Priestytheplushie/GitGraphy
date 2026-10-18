@@ -74,3 +74,15 @@ type BlameResult struct {
 	CommitCount int
 	Lines       []BlameLine
 }
+
+type CompareResult struct {
+	BaseRef      string
+	TargetRef    string
+	CommitsAhead []Commit
+	AheadCount   int
+	BehindCount  int
+	Stats        []FileStat
+	TotalAdd     int
+	TotalDel     int
+	PatchText    string
+}
