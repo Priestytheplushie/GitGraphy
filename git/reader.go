@@ -619,7 +619,6 @@ func (r *Repository) Compare(baseRef, targetRef string) (*CompareResult, error) 
 	ancestorHash := ""
 
 	if unrelated {
-		// When histories are unrelated, fall back to direct tree comparison
 		sourceTree, err = baseCommit.Tree()
 		if err != nil {
 			return nil, err
