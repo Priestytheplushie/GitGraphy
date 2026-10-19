@@ -18,7 +18,7 @@ import (
 
 var blameCmd = &cobra.Command{
 	Use:   "blame <file>",
-	Short: "View GitLens-style visual blame with syntax highlighting and commit grouping",
+	Short: "View GitLens-style visual blame with block headers and syntax highlighting",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		repo, err := git.Open(".")
@@ -53,19 +53,6 @@ func renderBlame(b *git.BlameResult) {
 		faint(fmt.Sprintf("%d contributors", len(b.Authors))),
 	)
 
-	maxAuthorLen := 0
-	for _, l := range b.Lines {
-		if len(l.Author) > maxAuthorLen {
-			maxAuthorLen = len(l.Author)
-		}
-	}
-	if maxAuthorLen > 20 {
-		maxAuthorLen = 20
-	}
-	if maxAuthorLen < 6 {
-		maxAuthorLen = 6
-	}
-
 	lineNumWidth := len(fmt.Sprintf("%d", b.TotalLines))
 	if lineNumWidth < 3 {
 		lineNumWidth = 3
@@ -74,71 +61,44 @@ func renderBlame(b *git.BlameResult) {
 	highlightedLines := highlightCode(b.Path, b.Lines)
 
 	lastHash := ""
-	const timeWidth = 9
-	const subjectWidth = 26
-
-	gutterWidth := 7 + 1 + maxAuthorLen + 1 + timeWidth + 1 + subjectWidth
+	const targetBannerLen = 78
 
 	for i, l := range b.Lines {
-		isNewBlock := l.Hash != lastHash
-		lastHash = l.Hash
+		if l.Hash != lastHash {
+			lastHash = l.Hash
 
-		colorFunc := getAgeColor(l.Date)
+			if i > 0 {
+				fmt.Println()
+			}
 
-		var gutter string
-		if isNewBlock {
-			author := l.Author
-			if len(author) > maxAuthorLen {
-				author = author[:maxAuthorLen-3] + "..."
-			}
-			padLen := maxAuthorLen - len(author)
-			if padLen < 0 {
-				padLen = 0
-			}
-			authorPadded := author + strings.Repeat(" ", padLen)
+			colorFunc := getAgeColor(l.Date)
+			hashStr := colorFunc(l.ShortHash)
+			authorStr := color.New(color.FgHiBlue, color.Bold).Sprint(l.Author)
+			timeStr := faint("(" + formatRelativeTime(l.Date) + ")")
+			subjStr := faint("\"" + l.Subject + "\"")
 
-			relTime := formatRelativeTime(l.Date)
-			if len(relTime) > timeWidth {
-				relTime = relTime[:timeWidth]
-			}
-			timePadLen := timeWidth - len(relTime)
-			if timePadLen < 0 {
-				timePadLen = 0
-			}
-			timePadded := relTime + strings.Repeat(" ", timePadLen)
+			prefix := fmt.Sprintf("── %s • %s %s • %s ", hashStr, authorStr, timeStr, subjStr)
+			visibleLen := 3 + len(l.ShortHash) + 3 + len(l.Author) + 1 + len(formatRelativeTime(l.Date)) + 2 + 3 + len(l.Subject) + 2 + 1
 
-			subj := l.Subject
-			if len(subj) > subjectWidth {
-				subj = subj[:subjectWidth-3] + "..."
+			padLen := targetBannerLen - visibleLen
+			if padLen < 4 {
+				padLen = 4
 			}
-			subjPadLen := subjectWidth - len(subj)
-			if subjPadLen < 0 {
-				subjPadLen = 0
-			}
-			subjPadded := subj + strings.Repeat(" ", subjPadLen)
 
-			gutter = fmt.Sprintf(
-				"%s %s %s %s",
-				colorFunc(l.ShortHash),
-				color.New(color.FgHiBlue).Sprint(authorPadded),
-				faint(timePadded),
-				faint(subjPadded),
-			)
-		} else {
-			gutter = strings.Repeat(" ", gutterWidth)
+			rule := faint(strings.Repeat("─", padLen))
+			fmt.Printf("%s%s\n", prefix, rule)
 		}
 
 		code := ""
 		if i < len(highlightedLines) {
 			code = highlightedLines[i]
 		}
+		code = strings.ReplaceAll(code, "\t", "    ")
 
 		fmt.Printf(
-			"%*d %s %s %s %s\n",
+			"%*d %s %s\n",
 			lineNumWidth,
 			l.LineNo,
-			sep,
-			gutter,
 			sep,
 			code,
 		)
