@@ -117,7 +117,7 @@ func highlightCode(path string, lines []git.BlameLine) []string {
 	}
 	lexer = chroma.Coalesce(lexer)
 
-	style := styles.Get("dracula")
+	style := styles.Get("github-dark")
 	if style == nil {
 		style = styles.Fallback
 	}
