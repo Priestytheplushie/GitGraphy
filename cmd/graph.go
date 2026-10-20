@@ -126,9 +126,9 @@ func renderGraph(commits []git.Commit) {
 		for i := 0; i < len(lanes); i++ {
 			cFunc := getLaneColor(i)
 			if i == laneIdx {
-				graphPrefix.WriteString(cFunc("●") + " ")
+				graphPrefix.WriteString(cFunc("●"));graphPrefix.WriteString(" ")
 			} else if lanes[i] != "" {
-				graphPrefix.WriteString(cFunc("│") + " ")
+				graphPrefix.WriteString(cFunc("│"));graphPrefix.WriteString(" ")
 			} else {
 				graphPrefix.WriteString("  ")
 			}
@@ -240,25 +240,25 @@ func buildBridge(lanes []string, trunkLane, branchLane int, kind string) string 
 		switch {
 		case i < left:
 			if lanes[i] != "" {
-				sb.WriteString(getLaneColor(i)("│") + " ")
+				sb.WriteString(getLaneColor(i)("│"));sb.WriteString(" ")
 			} else {
 				sb.WriteString("  ")
 			}
 
 		case i == left:
 			if !reversed {
-				sb.WriteString(trunkColor("├") + branchColor("─"))
+				sb.WriteString(trunkColor("├"));sb.WriteString(branchColor("─"))
 			} else {
 				if kind == "fork" {
-					sb.WriteString(branchColor("╭") + trunkColor("─"))
+					sb.WriteString(branchColor("╭"));sb.WriteString(trunkColor("─"))
 				} else {
-					sb.WriteString(branchColor("╰") + trunkColor("─"))
+					sb.WriteString(branchColor("╰"));sb.WriteString(trunkColor("─"))
 				}
 			}
 
 		case i > left && i < right:
 			if lanes[i] != "" {
-				sb.WriteString(getLaneColor(i)("│") + bridgeColor("─"))
+				sb.WriteString(getLaneColor(i)("│"));sb.WriteString(bridgeColor("─"))
 			} else {
 				sb.WriteString(bridgeColor("──"))
 			}
@@ -266,17 +266,17 @@ func buildBridge(lanes []string, trunkLane, branchLane int, kind string) string 
 		case i == right:
 			if !reversed {
 				if kind == "fork" {
-					sb.WriteString(branchColor("╮") + " ")
+					sb.WriteString(branchColor("╮"));sb.WriteString(" ")
 				} else {
-					sb.WriteString(branchColor("╯") + " ")
+					sb.WriteString(branchColor("╯"));sb.WriteString(" ")
 				}
 			} else {
-				sb.WriteString(trunkColor("┤") + " ")
+				sb.WriteString(trunkColor("┤"));sb.WriteString(" ")
 			}
 
 		case i > right:
 			if lanes[i] != "" {
-				sb.WriteString(getLaneColor(i)("│") + " ")
+				sb.WriteString(getLaneColor(i)("│"));sb.WriteString(" ")
 			} else {
 				sb.WriteString("  ")
 			}

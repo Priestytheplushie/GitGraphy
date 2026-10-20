@@ -108,7 +108,7 @@ func renderBlame(b *git.BlameResult) {
 func highlightCode(path string, lines []git.BlameLine) []string {
 	var fullCode strings.Builder
 	for _, l := range lines {
-		fullCode.WriteString(strings.TrimRight(l.Code, "\r\n") + "\n")
+		fullCode.WriteString(strings.TrimRight(l.Code, "\r\n"));fullCode.WriteString("\n")
 	}
 
 	lexer := lexers.Match(path)
