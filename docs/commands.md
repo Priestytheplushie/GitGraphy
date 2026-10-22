@@ -80,7 +80,7 @@ gitgraphy blame main.go
 ```
 
 ## graph
-The `gitgraphy graph` command lets you view a visual git graph of your commit history. On the graph, you can visually see merges. Like `log`, all commit hashes, names and author, as well as the date. You can pass the `-n` or `--limit` flag to show more or less commits 
+The `gitgraphy graph` command lets you view a visual git graph of your commit history. On the graph, you can visually see merges. Like `log`, all commit hashes, names and author, as well as the date. You can pass the `-n` or `--limit` flag to show more or less commits. You can also pass the the `-c` or `--compact` to display a graph without any commit metadata.  
 
 >[!WARNING]
 >Passing the `-n` flag or `--limit` flag with `0` will print **all** commits, which can cause lag or freezes
@@ -93,8 +93,9 @@ Usage:
   gitgraphy graph [flags]
 
 Flags:
+  -c, --compact     Show/hide all graph metadata
   -h, --help        help for graph
-  -n, --limit int   Number of commits to show (0 for all) (default 30)
+  -n, --limit int   Number of commits to show (0 for all) (default 50)
 ```
 
 ### Usage Examples
@@ -107,6 +108,10 @@ gitgraphy graph -n 100
 
 # View a graph with all commits
 gitgraphy graph -n 0
+
+# View a graph in compact mode 
+gitgraphy graph -c 
+
 ``` 
 
 ## show 

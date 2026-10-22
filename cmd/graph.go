@@ -11,6 +11,7 @@ import (
 )
 
 var graphLimit int
+var compactGraph = false
 
 var graphCmd = &cobra.Command{
 	Use:   "graph",
@@ -37,7 +38,8 @@ var graphCmd = &cobra.Command{
 }
 
 func init() {
-	graphCmd.Flags().IntVarP(&graphLimit, "limit", "n", 30, "Number of commits to show (0 for all)")
+	graphCmd.Flags().IntVarP(&graphLimit, "limit", "n", 50, "Number of commits to show (0 for all)")
+	graphCmd.Flags().BoolVarP(&compactGraph, "compact", "c",false, "Show/hide all graph metadata")
 	rootCmd.AddCommand(graphCmd)
 }
 
@@ -174,16 +176,18 @@ func renderGraph(commits []git.Commit) {
 		}
 
 		var refDecorations []string
-		for _, ref := range c.Refs {
-			switch {
-			case ref.IsHEAD:
-				refDecorations = append(refDecorations, headColor("HEAD -> ")+branchColor(ref.Name))
-			case ref.IsRemote:
-				refDecorations = append(refDecorations, remoteColor(ref.Name))
-			case ref.IsTag:
-				refDecorations = append(refDecorations, tagColor("tag: "+ref.Name))
-			default:
-				refDecorations = append(refDecorations, branchColor(ref.Name))
+		if compactGraph != true{
+			for _, ref := range c.Refs {
+				switch {
+				case ref.IsHEAD:
+					refDecorations = append(refDecorations, headColor("HEAD -> ")+branchColor(ref.Name))
+				case ref.IsRemote:
+					refDecorations = append(refDecorations, remoteColor(ref.Name))
+				case ref.IsTag:
+					refDecorations = append(refDecorations, tagColor("tag: "+ref.Name))
+				default:
+					refDecorations = append(refDecorations, branchColor(ref.Name))
+				}
 			}
 		}
 
@@ -198,17 +202,23 @@ func renderGraph(commits []git.Commit) {
 		}
 
 		relTime := formatRelativeTime(c.When)
-
-		fmt.Printf(
-			"%s%s %s%s  %s  %s  %s\n",
-			graphPrefix.String(),
-			hashColor(c.ShortHash),
-			refString,
-			subject,
-			bulletColor("•"),
-			authorColor(c.AuthorName),
-			timeColor("("+relTime+")"),
-		)
+		if compactGraph {
+			fmt.Printf(
+				"%s\n",
+				graphPrefix.String(),
+			)
+		} else {
+			fmt.Printf(
+				"%s%s %s%s  %s  %s  %s\n",
+				graphPrefix.String(),
+				hashColor(c.ShortHash),
+				refString,
+				subject,
+				bulletColor("•"),
+				authorColor(c.AuthorName),
+				timeColor("("+relTime+")"),
+			)
+		}
 
 		if isMerge && p2Lane != -1 {
 			line := buildBridge(lanes, laneIdx, p2Lane, "fork") + padGutter(len(lanes), maxLanesEncountered)
