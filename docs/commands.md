@@ -60,4 +60,98 @@ gitgraphy compare main feature/auth -s
 ```
 
 ## blame
-The `gitgraphy blame` command allows you to see which `Commit` and `Author` modified that speicfic line of a file 
+The `gitgraphy blame` command allows you to see which `Commit` and `Author` modified that speicfic line of a file. There are **no flags** for this command, you just pass the `FileName` with the command.
+
+### Usage 
+```bash
+View GitLens-style visual blame with block headers and syntax highlighting
+
+Usage:
+  gitgraphy blame <file> [flags]
+
+Flags:
+  -h, --help   help for blame
+  ```
+
+### Usage Examples
+```bash
+# Check on main.go
+gitgraphy blame main.go 
+```
+
+## graph
+The `gitgraphy graph` command lets you view a visual git graph of your commit history. On the graph, you can visually see merges. Like `log`, all commit hashes, names and author, as well as the date. You can pass the `-n` or `--limit` flag to show more or less commits 
+
+>[!WARNING]
+>Passing the `-n` flag or `--limit` flag with `0` will print **all** commits, which can cause lag or freezes
+
+### Usage
+```bash
+Visualize commit history as a multi-branch transit map
+
+Usage:
+  gitgraphy graph [flags]
+
+Flags:
+  -h, --help        help for graph
+  -n, --limit int   Number of commits to show (0 for all) (default 30)
+```
+
+### Usage Examples
+```bash
+# View a graph of the last 30 commits
+gitgraphy graph
+
+# View a graph of the last 100 commits
+gitgraphy graph -n 100
+
+# View a graph with all commits
+gitgraphy graph -n 0
+``` 
+
+## show 
+The `gitgraphy show` command allows you to inspect a single commit, viewing extended information about it, including the `diff`. Like `gitgraphy compare`, you can pass the `-s` or `-stats` flag to only show the summary, without the diff. 
+
+### Usage
+```bash
+Inspect a commit with summary and diff
+
+Usage:
+  gitgraphy show [hash] [flags]
+
+Flags:
+  -h, --help   help for show
+  -s, --stat   Show file summary only without code diffs
+```
+
+### Usage Examples
+```bash
+# Inspect the HEAD commit 
+gitgraphy show
+
+# Inspect a specific commit (can also be shortened hash)
+gitgraphy show 876ce9c59db8510fa0d767fd1d62a725a1eb2531
+
+# Inspect HEAD with summary only
+gitgraphy show -s
+```
+
+## status
+The `gitgraphy status` command provides a high level status overview of the **current working tree**, letting you see ahead / behind counts and unstaged, staged, modified, and untracked files. This command has no flags
+
+### Usage
+```bash
+Show a clean visual of the working tree
+
+Usage:
+  gitgraphy status [flags]
+
+Flags:
+  -h, --help   help for status
+```
+
+### Usage Examples
+```bash
+# View the current working tree
+gitgraphy status
+```
